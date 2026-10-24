@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql, type SQL
 import type { SelectedFields } from 'drizzle-orm/pg-core';
 import { db } from '@/db';
 import { gameScreenshots, games, handlerVersions, handlers, users } from '@/db/schema';
+import type { ClientId } from '@/lib/clients';
 import { genreFromSlug } from '@/lib/genres';
 import { isValidId } from '@/lib/ids';
 import { cached, TAGS } from '../cache';
@@ -24,6 +25,7 @@ import {
 /** Columns of a handler summary: handler + game + author + current version. */
 export const summaryColumns = {
   id: handlers.id,
+  client: handlers.client,
   title: handlers.title,
   gameId: games.id,
   gameName: games.name,
@@ -73,6 +75,7 @@ export function toPublicHandler(r: SummaryRow): PublicHandler {
   const deleted = r.ownerDeletedAt !== null;
   return {
     id: r.id,
+    client: r.client,
     title: r.title,
     gameId: r.gameId,
     gameName: r.gameName,
@@ -101,9 +104,14 @@ export function toPublicHandler(r: SummaryRow): PublicHandler {
   };
 }
 
-/** Primary handler order inside a game (section 2.3): featured, verified, trend, downloads, oldest. */
+/**
+ * Primary handler order inside a game (section 2.3): featured, Nucleus Co-op first, verified, trend,
+ * downloads, oldest. Nucleus first keeps the game pages and canonical URLs that existed before the hub
+ * hosted other tools; the other tools' handlers are listed next to it on the game page.
+ */
 export const primaryOrder: SQL[] = [
   sql`(${handlers.id} = ${games.featuredHandlerId}) desc nulls last`,
+  sql`(${handlers.client} = 'nucleus') desc`,
   sql`(${handlerVersions.verifiedAt} is not null) desc`,
   desc(handlers.trendScore),
   desc(handlers.downloadCount),
@@ -112,13 +120,16 @@ export const primaryOrder: SQL[] = [
 
 // ---------- catalogue ----------
 
-/** Every listed handler, trend order: the app's whole catalogue. Cached 5 minutes. */
-export function getCatalog(): Promise<PublicHandler[]> {
+/**
+ * Every listed handler, trend order: the app's whole catalogue. `client` keeps only one tool's handlers
+ * (the Nucleus Co-op app reads the `nucleus` list). Cached 5 minutes per `client`.
+ */
+export function getCatalog(client?: ClientId): Promise<PublicHandler[]> {
   return cached(
-    'catalog:all',
+    `catalog:${client ?? 'all'}`,
     5 * 60_000,
     async () => {
-      const rows = await listedSummaries().orderBy(
+      const rows = await listedSummaries(client ? eq(handlers.client, client) : undefined).orderBy(
         desc(handlers.trendScore),
         desc(handlers.downloadCount),
         asc(handlers.id),
@@ -181,6 +192,7 @@ export async function searchHandlers(params: SearchParams): Promise<Page<PublicH
   const pageSize = Math.min(100, Math.max(1, Math.floor(params.pageSize ?? 24)));
   const filters: SQL[] = [];
 
+  if (params.client) filters.push(eq(handlers.client, params.client));
   if (params.genre) {
     const genre = genreFromSlug(params.genre, await getGenreNames());
     if (!genre) return { items: [], page, pageSize, total: 0 };
@@ -393,6 +405,7 @@ export async function getVersionFile(handlerId: string, version?: number): Promi
     .select({
       ...versionColumns,
       handlerId: handlerVersions.handlerId,
+      client: handlers.client,
       storageKey: handlerVersions.storageKey,
     })
     .from(handlerVersions)
@@ -409,7 +422,9 @@ export async function getVersionFile(handlerId: string, version?: number): Promi
     )
     .limit(1);
   const r = rows[0];
-  return r ? { ...toPublicVersion(r), handlerId: r.handlerId, storageKey: r.storageKey } : null;
+  return r
+    ? { ...toPublicVersion(r), handlerId: r.handlerId, client: r.client, storageKey: r.storageKey }
+    : null;
 }
 
 /** One version with its manifest and stamped script, for the version page and the script endpoint. */
@@ -418,7 +433,12 @@ export async function getVersionDetail(
   version: number,
 ): Promise<PublicVersionDetail | null> {
   const rows = await db
-    .select({ ...versionColumns, manifest: handlerVersions.manifest, script: handlerVersions.script })
+    .select({
+      ...versionColumns,
+      client: handlers.client,
+      manifest: handlerVersions.manifest,
+      script: handlerVersions.script,
+    })
     .from(handlerVersions)
     .innerJoin(handlers, eq(handlers.id, handlerVersions.handlerId))
     .where(
@@ -431,7 +451,7 @@ export async function getVersionDetail(
     )
     .limit(1);
   const r = rows[0];
-  return r ? { ...toPublicVersion(r), manifest: r.manifest, script: r.script } : null;
+  return r ? { ...toPublicVersion(r), client: r.client, manifest: r.manifest, script: r.script } : null;
 }
 
 /** Listed handlers by ids (keeps only listed ones), e.g. for collections. */

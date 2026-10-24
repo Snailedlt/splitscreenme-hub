@@ -1,6 +1,6 @@
 import { errorResponses, registry } from '../openapi';
 import { Catalog, HandlerPage } from '../schemas/handlers';
-import { HandlersQuery } from '../schemas/params';
+import { CatalogQuery, HandlersQuery } from '../schemas/params';
 import { CATALOG_CACHE, cacheHeaders, notModified, READ_CACHE } from './common';
 
 registry.registerPath({
@@ -13,7 +13,10 @@ registry.registerPath({
     'The whole catalogue in one answer, trending first: what the desktop app loads to browse and search ' +
     'offline. About 900 handlers, gzip-compressed on the wire. Rebuilt at most every 5 minutes; send the ' +
     '`ETag` back in `If-None-Match` and you get a 304 while nothing changed.\n\n' +
+    'By default only Nucleus Co-op handlers are listed (`client=nucleus`), which is what the Nucleus Co-op app ' +
+    'reads. Pass `client=partydeck` or `client=all` for other tools.\n\n' +
     'Rate limit: 30 requests per 5 minutes per address (bucket `catalog`).',
+  request: { query: CatalogQuery },
   responses: {
     200: {
       description: 'Every listed handler',

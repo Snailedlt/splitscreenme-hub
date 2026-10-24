@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import { notFound, preflight, withApi } from '@/lib/api/http';
 import { DownloadQuery, HandlerPath, parseParams, parseQuery } from '@/lib/api/schemas/params';
+import { getClient, packageFileName } from '@/lib/clients';
 import { log } from '@/lib/log';
 import { accelPath, openRead, stat } from '@/lib/storage';
 import { matchesEtag } from '@/server/api/http';
@@ -10,9 +11,10 @@ import { getVersionFile } from '@/server/public';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET/HEAD /api/v3/handlers/{id}/download: the `.nc` package of a listed handler (current version, or
- * `?version=n`). Counted once per address, handler, version and UTC day unless `count=false`, a partial
- * range, HEAD or a bot (docs/ARCHITECTURE.md 5.5). Behind nginx (STORAGE_ACCEL_PREFIX) the file itself is
+ * GET/HEAD /api/v3/handlers/{id}/download: the package of a listed handler (current version, or
+ * `?version=n`): a `.nc` file for Nucleus Co-op, the tool's own file (`.pd2`) for the others. Counted once
+ * per address, handler, version and UTC day unless `count=false`, a partial range, HEAD or a bot
+ * (docs/ARCHITECTURE.md 5.5). Behind nginx (STORAGE_ACCEL_PREFIX) the file itself is
  * sent by nginx through X-Accel-Redirect; without it (development) Node streams it.
  */
 const download = withApi<{ id: string }>(
@@ -30,8 +32,8 @@ const download = withApi<{ id: string }>(
 
     const etag = `"${file.sha256}"`;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="handler-${id}-v${file.version}.nc"`,
+      'Content-Type': getClient(file.client).contentType,
+      'Content-Disposition': `attachment; filename="${packageFileName(file.client, id, file.version)}"`,
       ETag: etag,
       'Repr-Digest': reprDigest(file.sha256),
       'Cache-Control': 'private, no-cache',

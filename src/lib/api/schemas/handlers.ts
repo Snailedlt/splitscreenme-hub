@@ -1,3 +1,4 @@
+import { CLIENT_IDS } from '@/lib/clients';
 import { z } from '../zod';
 import { Id } from './common';
 
@@ -9,6 +10,13 @@ import { Id } from './common';
 
 const isoDate = (description: string) =>
   z.iso.datetime().openapi({ description, example: '2026-03-14T09:26:53.000Z' });
+
+export const Client = z.enum(CLIENT_IDS).openapi('Client', {
+  description:
+    'The split-screen tool a handler is for: `nucleus` (Nucleus Co-op, Windows, `.nc` packages) or ' +
+    '`partydeck` (PartyDeck, Linux and SteamOS, `.pd2` packages).',
+  example: 'nucleus',
+});
 
 export const Inputs = z
   .object({
@@ -49,6 +57,10 @@ export const Screenshot = z
 export const HandlerSummary = z
   .object({
     id: Id.openapi({ description: 'Handler id. Stable: the desktop app stores it.' }),
+    client: Client.openapi({
+      description:
+        'The tool this handler is for. Its package is a `.nc` file for `nucleus` and a `.pd2` file for `partydeck`.',
+    }),
     title: z.string().openapi({ example: 'Portal 2 (4 players)' }),
     url: z.url().openapi({
       description:
@@ -101,15 +113,21 @@ export const Version = z
     sha256: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
-      .openapi({ description: 'SHA-256 of the `.nc` file, hex. Check it after downloading.' }),
-    fileName: z.string().openapi({ example: 'handler-RkbcpmL5dNbrDcfjL-v3.nc' }),
+      .openapi({ description: 'SHA-256 of the package file, hex. Check it after downloading.' }),
+    fileName: z.string().openapi({
+      description: '`handler-<id>-v<version>` plus `.nc` (Nucleus Co-op) or `.pd2` (PartyDeck).',
+      example: 'handler-RkbcpmL5dNbrDcfjL-v3.nc',
+    }),
     downloads: z.number().int().openapi({ description: 'Counted downloads of this version.' }),
     downloadUrl: z.url().openapi({
       description: 'Counted download of this version (`GET /handlers/{id}/download?version=n`).',
       example: 'https://v3.splitscreen.me/api/v3/handlers/RkbcpmL5dNbrDcfjL/download?version=3',
     }),
   })
-  .openapi('Version', { description: 'One uploaded version of a handler (a `.nc` package, a zip file).' });
+  .openapi('Version', {
+    description:
+      'One uploaded version of a handler: a `.nc` package (a zip file) for Nucleus Co-op, a `.pd2` package for PartyDeck.',
+  });
 
 export const HandlerDetail = HandlerSummary.extend({
   description: z.string().openapi({

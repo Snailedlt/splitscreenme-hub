@@ -12,6 +12,7 @@ export const GET = withApi(async (req) => {
   const [result, ctx] = await Promise.all([
     searchHandlers({
       q: query.q,
+      client: query.client,
       genre: query.genre,
       players: query.players,
       inputs: query.input,

@@ -1,5 +1,6 @@
 import { CACHE, notFound, preflight, weakEtag, withApi } from '@/lib/api/http';
 import { parseParams, VersionPath } from '@/lib/api/schemas/params';
+import { getClient } from '@/lib/clients';
 import { matchesEtag } from '@/server/api/http';
 import { getVersionDetail } from '@/server/public';
 
@@ -8,11 +9,12 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/v3/handlers/{id}/versions/{version}/script: the stamped handler.js of a version, as plain text.
  * It is the author's code: served as text only, with nosniff and a sandbox CSP so a browser never runs it.
+ * Only Nucleus Co-op packages have one: the hub does not open the packages of other tools (404).
  */
 export const GET = withApi<{ id: string; version: string }>(async (req, { params }) => {
   const { id, version } = parseParams(VersionPath, params);
   const detail = await getVersionDetail(id, version);
-  if (!detail) throw notFound('Handler version');
+  if (!detail || getClient(detail.client).packageKind !== 'nucleus') throw notFound('Handler version');
   const etag = weakEtag(detail.script);
   const headers = {
     ETag: etag,

@@ -37,6 +37,7 @@ export function toHandlerSummary(h: PublicHandler, ctx: LinkContext): HandlerSum
   const authorVisible = h.authorId !== null && !ctx.hiddenAuthorIds.has(h.authorId);
   return {
     id: h.id,
+    client: h.client,
     title: h.title,
     url: handlerUrl(h, ctx.primaryIds.has(h.id)),
     gameName: h.gameName,

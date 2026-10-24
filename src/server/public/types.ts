@@ -1,3 +1,5 @@
+import type { ClientId } from '@/lib/clients';
+
 /**
  * Domain types of public data (not API DTOs: src/lib/api/dto.ts maps these to the API schemas).
  * Everything here is about listed handlers only.
@@ -11,6 +13,8 @@ export interface Inputs {
 
 export interface PublicHandler {
   id: string;
+  /** the split-screen tool this handler is for */
+  client: ClientId;
   title: string;
   gameId: number;
   gameName: string;
@@ -53,12 +57,14 @@ export interface PublicVersion {
 /** What a download needs (storage key) on top of the public facts. */
 export interface PublicVersionFile extends PublicVersion {
   handlerId: string;
+  client: ClientId;
   storageKey: string;
 }
 
 export interface PublicVersionDetail extends PublicVersion {
+  client: ClientId;
   manifest: { path: string; size: number }[];
-  /** stamped handler.js */
+  /** stamped handler.js; empty for tools whose package the hub does not read (opaque packages) */
   script: string;
 }
 
@@ -148,6 +154,8 @@ export type SortKey = 'trending' | 'downloads' | 'updated' | 'az' | 'stars' | 'n
 
 export interface SearchParams {
   q?: string;
+  /** only handlers for this tool */
+  client?: ClientId;
   /** genre URL slug */
   genre?: string;
   players?: PlayersFilter;

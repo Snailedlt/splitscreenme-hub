@@ -52,7 +52,8 @@ registry.registerPath({
   summary: 'Script of a version',
   description:
     'The `handler.js` of a version as plain text, as stamped by the hub at upload: its first lines set ' +
-    '`Hub.Handler.Version`, `Hub.Handler.Id`, `Hub.Maintainer.Name` and `Hub.Maintainer.Id`.',
+    '`Hub.Handler.Version`, `Hub.Handler.Id`, `Hub.Maintainer.Name` and `Hub.Maintainer.Id`. Only Nucleus Co-op ' +
+    'handlers have one: the hub does not open the packages of other tools, so those answer 404.',
   request: { params: VersionPath },
   responses: {
     200: {
@@ -73,7 +74,7 @@ registry.registerPath({
 
 const downloadHeaders = {
   'Content-Disposition': {
-    description: '`attachment; filename="handler-<id>-v<version>.nc"`',
+    description: '`attachment; filename="handler-<id>-v<version>.nc"` (`.pd2` for a PartyDeck handler)',
     schema: { type: 'string' as const },
   },
   ETag: { description: 'The SHA-256 of the file, hex, quoted.', schema: { type: 'string' as const } },
@@ -85,13 +86,15 @@ const downloadHeaders = {
 };
 
 const downloadDescription =
-  'The `.nc` package (a zip file) of the current version, or of `version`.\n\n' +
+  'The package of the current version, or of `version`: a `.nc` file (a zip file, `Content-Type: application/zip`) ' +
+  'for a Nucleus Co-op handler, a `.pd2` file (`application/octet-stream`) for a PartyDeck handler. See `client` ' +
+  'in the handler.\n\n' +
   '**Counting.** A `GET` counts one download for the handler and the version, at most once per address, ' +
   'handler, version and UTC day. It does not count with `count=false`, for `HEAD`, for a partial `Range` ' +
   '(other than `bytes=0-`), or for crawlers, link previews, `curl` and `wget`. **Use `count=false` when you ' +
   'try it out here**, in tests and for previews.\n\n' +
   'Check the file against `sha256` of the version (also in `ETag` and `Repr-Digest`). The answer is the ' +
-  'file itself, served with `Content-Type: application/zip`.\n\n' +
+  'file itself.\n\n' +
   'Rate limit: 60 requests per 10 minutes per address (bucket `download`).';
 
 for (const method of ['get', 'head'] as const) {

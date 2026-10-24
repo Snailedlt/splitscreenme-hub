@@ -1,4 +1,5 @@
 import type { ZodType } from 'zod';
+import { CLIENT_IDS } from '@/lib/clients';
 import { z } from '../zod';
 import { Id } from './common';
 
@@ -52,6 +53,10 @@ export const INPUTS = ['controllers', 'keyboardMouse', 'multiKeyboardMouse'] as 
 export const SORTS = ['trending', 'downloads', 'updated', 'az', 'stars', 'newest'] as const;
 
 export const HandlersQuery = z.object({
+  client: z.enum(CLIENT_IDS).optional().openapi({
+    description:
+      'Only handlers for this tool: `nucleus` (Nucleus Co-op) or `partydeck` (PartyDeck). All tools when omitted.',
+  }),
   q: z.string().trim().max(100).optional().openapi({
     description:
       'Search words (5 at most). Every word must appear in the game name, the handler title or the author name; accents and case are ignored. When nothing matches, close game names are returned instead.',
@@ -82,6 +87,19 @@ export const HandlersQuery = z.object({
   }),
   page: queryInt(1, 10_000, 'Page number, from 1.').default(1),
   pageSize: queryInt(1, 100, 'Items per page.').default(24),
+});
+
+export const CATALOG_CLIENTS = [...CLIENT_IDS, 'all'] as const;
+
+export const CatalogQuery = z.object({
+  client: z
+    .enum(CATALOG_CLIENTS)
+    .default('nucleus')
+    .openapi({
+      description:
+        "Which tool's handlers to list: `nucleus` (default, what the Nucleus Co-op app reads), `partydeck`, or `all`. " +
+        'The default keeps the answer the Nucleus Co-op app has always received.',
+    }),
 });
 
 export const DownloadQuery = z.object({
