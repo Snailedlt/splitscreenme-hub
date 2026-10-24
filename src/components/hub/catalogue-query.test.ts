@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   catalogueHref,
   catalogueSearch,
+  CLIENT_OPTIONS,
   DEFAULT_QUERY,
   isRefined,
   MAX_PAGE,
@@ -23,6 +24,7 @@ describe('catalogue URL state', () => {
       }),
     ).toEqual({
       q: 'left 4 dead',
+      client: null,
       players: '3-4',
       inputs: ['controllers', 'multiKeyboardMouse'],
       verified: true,
@@ -74,5 +76,24 @@ describe('handler variant', () => {
     expect(handlerVariant('Pokémon Party', 'Pokemon')).toBe('Party');
     expect(initial('  _x')).toBe('X');
     expect(initial('***')).toBe('?');
+  });
+});
+
+describe('client filter in the catalogue URL', () => {
+  it('parses a known tool and ignores anything else', () => {
+    expect(parseCatalogueQuery({ client: 'partydeck' }).client).toBe('partydeck');
+    expect(parseCatalogueQuery({ client: 'nucleus' }).client).toBe('nucleus');
+    expect(parseCatalogueQuery({ client: 'uss' }).client).toBeNull();
+    expect(parseCatalogueQuery({ client: '' }).client).toBeNull();
+    expect(parseCatalogueQuery(new URLSearchParams('client=partydeck')).client).toBe('partydeck');
+  });
+
+  it('writes it back, makes the page a refined variant, and drops it again', () => {
+    const query = parseCatalogueQuery({ client: 'partydeck', players: '2' });
+    expect(catalogueSearch(query)).toBe('?client=partydeck&players=2');
+    expect(isRefined(query)).toBe(true);
+    expect(isRefined(parseCatalogueQuery({}))).toBe(false);
+    expect(catalogueHref('/hub', query, { client: null })).toBe('/hub?players=2');
+    expect(CLIENT_OPTIONS.map((o) => o.value)).toEqual(['nucleus', 'partydeck']);
   });
 });

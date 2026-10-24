@@ -100,6 +100,17 @@
     width: 16px;
     height: 16px;
   }
+  /* Which tool a handler is for; shown only for tools other than Nucleus Co-op (the default). */
+  .hub-tool {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--pane-2);
+    color: var(--ink-2);
+    font-size: var(--t-small);
+    line-height: 1.4;
+  }
   .hub-dl {
     display: inline-flex;
     align-items: center;

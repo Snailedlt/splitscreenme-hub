@@ -18,6 +18,7 @@ import { buildMetadata } from './metadata';
 
 const handler: PublicHandler = {
   id: 'listedHandler0001',
+  client: 'nucleus',
   title: 'Portal 2 coop',
   gameId: 1,
   gameName: 'Portal 2',
@@ -170,5 +171,55 @@ describe('buildMetadata', () => {
     expect(m.twitter).not.toHaveProperty('images');
     expect(m.alternates?.canonical).toBe('http://localhost:3000/hub');
     expect(buildMetadata({ title: 'T', noindex: true }).robots).toEqual({ index: false, follow: true });
+  });
+});
+
+describe('copy for other tools', () => {
+  const partydeck = { ...handler, client: 'partydeck' as const };
+
+  it('leaves the Nucleus Co-op copy exactly as it was', () => {
+    expect(gameMetaDescription(handler)).toContain('Free Nucleus Co-op handler by creator-01');
+    const steps = howToSteps(handler);
+    expect(steps).toHaveLength(4);
+    expect(steps[0]!.name).toBe('Get Nucleus Co-op');
+    expect(videoGameJsonLd(game, handler, 'x').operatingSystem).toBe('Windows');
+    expect(howToJsonLd('Portal 2', steps, '/hub/portal-2').tool).toEqual([
+      { '@type': 'HowToTool', name: 'Nucleus Co-op' },
+    ]);
+  });
+
+  it('names the tool in the meta descriptions and stays within the limit', () => {
+    for (const d of [
+      gameMetaDescription(partydeck),
+      handlerMetaDescription(partydeck),
+      gameMetaDescription({ ...partydeck, authorName: 'a-very-long-author-name-'.repeat(4) }),
+    ]) {
+      expect(d).toContain('PartyDeck');
+      expect(d).not.toContain('Nucleus');
+      expect(d.length).toBeLessThanOrEqual(META_DESCRIPTION_MAX);
+    }
+  });
+
+  it('gives its own steps, saying only what the tool documents', () => {
+    const steps = howToSteps(partydeck);
+    expect(steps.map((s) => s.name)).toEqual([
+      'Get PartyDeck',
+      'Install the Portal 2 handler',
+      'Launch and connect',
+    ]);
+    const text = steps.map((s) => `${s.text} ${s.tip ?? ''}`).join(' ');
+    expect(text).toContain('.pd2');
+    expect(text).toContain('Import button');
+    expect(text).toContain('KDE Plasma 6.0');
+    expect(text).not.toMatch(/Nucleus|Windows 10|C:\\|End once/);
+  });
+
+  it('describes the tool and its platform in the JSON-LD', () => {
+    const steps = howToSteps(partydeck);
+    const howTo = howToJsonLd('Portal 2', steps, '/hub/portal-2', 'partydeck');
+    expect(howTo.tool).toEqual([{ '@type': 'HowToTool', name: 'PartyDeck' }]);
+    expect(howTo.supply[0]).toEqual({ '@type': 'HowToSupply', name: 'A copy of Portal 2' });
+    expect(howTo.step).toHaveLength(3);
+    expect(videoGameJsonLd(game, partydeck, 'x').operatingSystem).toBe('Linux and SteamOS');
   });
 });

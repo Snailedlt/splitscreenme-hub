@@ -57,7 +57,9 @@ export default async function HandlerPage({ params, searchParams }: Props) {
   const crumbs = [...gameCrumbs(game), { label: h.title, href: pagePath }];
   return (
     <>
-      <JsonLd data={[howToJsonLd(game.name, steps, pagePath), breadcrumbJsonLd(crumbs)]} />
+      <JsonLd
+        data={[howToJsonLd(game.name, steps, pagePath, data.handler.client), breadcrumbJsonLd(crumbs)]}
+      />
       <HandlerView
         data={data}
         mode="handler"

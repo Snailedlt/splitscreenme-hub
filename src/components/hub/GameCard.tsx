@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { CoverImage, Icon, formatCount } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { DEFAULT_CLIENT, getClient } from '@/lib/clients';
 import { paths } from '@/lib/urls';
 import type { PublicHandler } from '@/server/public/types';
 import { InputIcons, Pips } from './Pips';
@@ -51,6 +52,11 @@ export function GameCard({
         </div>
         <div className="hub-card-row">
           <Pips count={h.maxPlayers} />
+          {h.client !== DEFAULT_CLIENT && (
+            <span className="hub-tool" title={`Made for ${getClient(h.client).label}`}>
+              {getClient(h.client).shortLabel}
+            </span>
+          )}
           <InputIcons inputs={h.inputs} />
         </div>
       </div>

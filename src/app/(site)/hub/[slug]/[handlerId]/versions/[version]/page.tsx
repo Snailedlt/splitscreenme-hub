@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { formatBytes } from '@/components/hub/CommunitySections';
 import { gameCrumbs } from '@/components/hub/crumbs';
 import { Breadcrumbs, CodeBlock, DateTime, LinkButton, Table, VerifiedBadge } from '@/components/ui';
+import { getClient } from '@/lib/clients';
 import { buildMetadata } from '@/lib/seo/metadata';
 import { apiBase, apiDownloadUrl, paths } from '@/lib/urls';
 import { LEGACY_ID } from '@/server/hub';
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!h || !n) return {};
   return buildMetadata({
     title: `${h.gameName} handler v${n}`,
-    description: `Version ${n} of the ${h.gameName} split-screen handler “${h.title}”: release notes, files and handler.js.`,
+    description: `Version ${n} of the ${h.gameName} split-screen handler “${h.title}”: release notes and download.`,
     path: paths.version(h.gameSlug, h.id, n),
     noindex: true,
   });
@@ -50,6 +51,9 @@ export default async function VersionPage({ params }: Props) {
   ];
   const scriptUrl = `${apiBase()}/handlers/${encodeURIComponent(h.id)}/versions/${n}/script`;
   const truncated = v.script.length > SCRIPT_PREVIEW_CHARS;
+  const tool = getClient(v.client);
+  // Only Nucleus Co-op packages are opened by the hub: the file list and handler.js exist for those alone.
+  const readable = tool.packageKind === 'nucleus';
   return (
     <>
       <section className="pane hub-section" aria-labelledby="version-title">
@@ -98,7 +102,7 @@ export default async function VersionPage({ params }: Props) {
               </div>
             </dl>
             <LinkButton href={apiDownloadUrl(h.id, n)} variant="primary" icon="download" rel="nofollow">
-              Download v{n} (.nc)
+              Download v{n} ({tool.extension})
             </LinkButton>
             <Link href={paths.versions(h.gameSlug, h.id)} className="small text-ink-2">
               All versions
@@ -107,50 +111,54 @@ export default async function VersionPage({ params }: Props) {
         </div>
       </section>
 
-      <section className="pane hub-section" aria-labelledby="files-title">
-        <h2 className="h3" id="files-title">
-          Files <span className="faint data">{v.manifest.length}</span>
-        </h2>
-        <Table className="hub-manifest">
-          <thead>
-            <tr>
-              <th scope="col">Path</th>
-              <th scope="col" className="num">
-                Size
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {v.manifest.map((f) => (
-              <tr key={f.path}>
-                <td>{f.path}</td>
-                <td className="num whitespace-nowrap">{formatBytes(f.size)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </section>
+      {readable && (
+        <>
+          <section className="pane hub-section" aria-labelledby="files-title">
+            <h2 className="h3" id="files-title">
+              Files <span className="faint data">{v.manifest.length}</span>
+            </h2>
+            <Table className="hub-manifest">
+              <thead>
+                <tr>
+                  <th scope="col">Path</th>
+                  <th scope="col" className="num">
+                    Size
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {v.manifest.map((f) => (
+                  <tr key={f.path}>
+                    <td>{f.path}</td>
+                    <td className="num whitespace-nowrap">{formatBytes(f.size)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </section>
 
-      <section className="pane hub-section" aria-labelledby="script-title">
-        <header>
-          <h2 className="h3" id="script-title">
-            handler.js
-          </h2>
-          <a href={scriptUrl} rel="nofollow">
-            Plain text
-          </a>
-        </header>
-        <CodeBlock
-          code={truncated ? `${v.script.slice(0, SCRIPT_PREVIEW_CHARS)}\n…` : v.script}
-          label="handler.js"
-          className="max-h-[70vh] overflow-auto"
-        />
-        {truncated && (
-          <p className="small faint mt-3 mb-0">
-            The script is long: the page shows its start. <a href={scriptUrl}>Open the whole file</a>.
-          </p>
-        )}
-      </section>
+          <section className="pane hub-section" aria-labelledby="script-title">
+            <header>
+              <h2 className="h3" id="script-title">
+                handler.js
+              </h2>
+              <a href={scriptUrl} rel="nofollow">
+                Plain text
+              </a>
+            </header>
+            <CodeBlock
+              code={truncated ? `${v.script.slice(0, SCRIPT_PREVIEW_CHARS)}\n…` : v.script}
+              label="handler.js"
+              className="max-h-[70vh] overflow-auto"
+            />
+            {truncated && (
+              <p className="small faint mt-3 mb-0">
+                The script is long: the page shows its start. <a href={scriptUrl}>Open the whole file</a>.
+              </p>
+            )}
+          </section>
+        </>
+      )}
     </>
   );
 }

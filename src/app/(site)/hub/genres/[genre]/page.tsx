@@ -49,6 +49,7 @@ export default async function GenrePage({ params, searchParams }: Props) {
   const [result, primaryIds] = await Promise.all([
     searchHandlers({
       q: query.q || undefined,
+      client: query.client ?? undefined,
       genre: genre.slug,
       players: query.players ?? undefined,
       inputs: query.inputs,

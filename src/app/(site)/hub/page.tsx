@@ -44,6 +44,7 @@ export default async function CataloguePage({ searchParams }: Props) {
   const [result, genres, primaryIds, stats, description] = await Promise.all([
     searchHandlers({
       q: query.q || undefined,
+      client: query.client ?? undefined,
       players: query.players ?? undefined,
       inputs: query.inputs,
       verified: query.verified,

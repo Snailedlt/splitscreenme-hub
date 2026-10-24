@@ -1,4 +1,5 @@
 import type { Inputs, PublicGame, PublicHandler } from '@/server/public/types';
+import { DEFAULT_CLIENT, getClient, type ClientId, type ClientInfo } from '../clients';
 import { genreLabel } from '../genres';
 import { absoluteUrl, igdbCoverUrl, paths, steamStoreUrl } from '../urls';
 import { pageTitle } from './metadata';
@@ -62,29 +63,33 @@ export function truncate(text: string, max: number): string {
  * Co-op handler by <author>, <inputs>. Step-by-step setup." Optional parts go first when it is too long.
  */
 export function gameMetaDescription(
-  h: Pick<PublicHandler, 'gameName' | 'maxPlayers' | 'authorName' | 'inputs'>,
+  h: Pick<PublicHandler, 'gameName' | 'maxPlayers' | 'authorName' | 'inputs'> & { client?: ClientId },
 ) {
+  const tool = getClient(h.client).label;
   const lead = `Play ${h.gameName} in split screen on one PC with ${playersPhrase(h.maxPlayers)}.`;
   const inputs = inputPhrase(h.inputs);
-  const handler = `Free Nucleus Co-op handler by ${h.authorName}`;
+  const handler = `Free ${tool} handler by ${h.authorName}`;
   const candidates = [
     `${lead} ${handler}${inputs ? `, ${inputs}` : ''}. Step-by-step setup.`,
     `${lead} ${handler}${inputs ? `, ${inputs}` : ''}.`,
     `${lead} ${handler}.`,
-    `${lead} Free Nucleus Co-op handler.`,
+    `${lead} Free ${tool} handler.`,
   ];
   return candidates.find((c) => c.length <= META_DESCRIPTION_MAX) ?? truncate(lead, META_DESCRIPTION_MAX);
 }
 
 /** Meta description of a non-primary handler page (≤155 chars). */
 export function handlerMetaDescription(
-  h: Pick<PublicHandler, 'title' | 'gameName' | 'maxPlayers' | 'authorName' | 'inputs'>,
+  h: Pick<PublicHandler, 'title' | 'gameName' | 'maxPlayers' | 'authorName' | 'inputs'> & {
+    client?: ClientId;
+  },
 ) {
+  const tool = getClient(h.client).label;
   const inputs = inputPhrase(h.inputs);
   const candidates = [
-    `“${h.title}” by ${h.authorName}: a free Nucleus Co-op handler to play ${h.gameName} in split screen on one PC with ${playersPhrase(h.maxPlayers)}${inputs ? `, ${inputs}` : ''}.`,
-    `“${h.title}” by ${h.authorName}: a free Nucleus Co-op handler to play ${h.gameName} in split screen on one PC.`,
-    `A free Nucleus Co-op handler to play ${h.gameName} in split screen on one PC with ${playersPhrase(h.maxPlayers)}.`,
+    `“${h.title}” by ${h.authorName}: a free ${tool} handler to play ${h.gameName} in split screen on one PC with ${playersPhrase(h.maxPlayers)}${inputs ? `, ${inputs}` : ''}.`,
+    `“${h.title}” by ${h.authorName}: a free ${tool} handler to play ${h.gameName} in split screen on one PC.`,
+    `A free ${tool} handler to play ${h.gameName} in split screen on one PC with ${playersPhrase(h.maxPlayers)}.`,
   ];
   return (
     candidates.find((c) => c.length <= META_DESCRIPTION_MAX) ?? truncate(candidates[2]!, META_DESCRIPTION_MAX)
@@ -100,9 +105,15 @@ export interface HowToStep {
   tip?: string;
 }
 
-/** The 4 setup steps of the game page (mockup `web/game.html`), shared by the page and the HowTo JSON-LD. */
-export function howToSteps(h: Pick<PublicHandler, 'gameName' | 'inputs'>): HowToStep[] {
+/**
+ * The 4 setup steps of the game page (mockup `web/game.html`), shared by the page and the HowTo JSON-LD.
+ * Written for Nucleus Co-op; the other tools get their own, shorter steps (`otherToolSteps`).
+ */
+export function howToSteps(
+  h: Pick<PublicHandler, 'gameName' | 'inputs'> & { client?: ClientId },
+): HowToStep[] {
   const game = h.gameName;
+  if (getClient(h.client).packageKind !== 'nucleus') return otherToolSteps(getClient(h.client), game);
   const keyboardsOnly = h.inputs.controllers === false && h.inputs.multiKeyboardMouse;
   return [
     {
@@ -130,12 +141,35 @@ export function howToSteps(h: Pick<PublicHandler, 'gameName' | 'inputs'>): HowTo
   ];
 }
 
+/**
+ * Setup steps for a tool whose own documentation the hub only links to: get the tool, import the handler,
+ * start the game from it. Only what the tool's README states (PartyDeck: Import button, one window per player).
+ */
+function otherToolSteps(tool: ClientInfo, game: string): HowToStep[] {
+  return [
+    {
+      name: `Get ${tool.label}`,
+      text: `Install ${tool.label} on your ${tool.platform} computer, following its own instructions.`,
+      tip: tool.platformNote,
+    },
+    {
+      name: `Install the ${game} handler`,
+      text: `Download the handler file (${tool.extension}) from this page. ${tool.installHint}`,
+    },
+    {
+      name: 'Launch and connect',
+      text: `Start ${game} from ${tool.label}: it opens one window per player and tiles them on your screen. Then link them in game, usually one player hosts a LAN or online session and the others join it. The handler notes say how.`,
+    },
+  ];
+}
+
 // ---------- JSON-LD ----------
 
 const SCHEMA = 'https://schema.org';
 
 /** VideoGame for a game page. Never aggregateRating or offers: stars are not ratings. */
 export function videoGameJsonLd(game: PublicGame, primary: PublicHandler, description: string) {
+  const tool = getClient(primary.client);
   const url = absoluteUrl(paths.game(game.slug));
   const sameAs = [game.igdbUrl, game.steamAppId ? steamStoreUrl(game.steamAppId) : null].filter(
     (x): x is string => !!x,
@@ -150,7 +184,7 @@ export function videoGameJsonLd(game: PublicGame, primary: PublicHandler, descri
     description: game.summary ? truncate(game.summary, 500) : description,
     ...(game.genres.length && { genre: game.genres.map(genreLabel) }),
     gamePlatform: 'PC',
-    operatingSystem: 'Windows',
+    operatingSystem: tool.platform,
     playMode: [`${SCHEMA}/CoOp`, `${SCHEMA}/MultiPlayer`],
     numberOfPlayers: {
       '@type': 'QuantitativeValue',
@@ -162,16 +196,25 @@ export function videoGameJsonLd(game: PublicGame, primary: PublicHandler, descri
 }
 
 /** HowTo for the steps section (`#step-n` anchors on the page at `pagePath`). */
-export function howToJsonLd(gameName: string, steps: HowToStep[], pagePath: string) {
+export function howToJsonLd(
+  gameName: string,
+  steps: HowToStep[],
+  pagePath: string,
+  client: ClientId = DEFAULT_CLIENT,
+) {
+  const tool = getClient(client);
   const url = absoluteUrl(pagePath);
   return {
     '@context': SCHEMA,
     '@type': 'HowTo',
     name: howToHeading(gameName),
     url: `${url}#how-to`,
-    tool: [{ '@type': 'HowToTool', name: 'Nucleus Co-op' }],
+    tool: [{ '@type': 'HowToTool', name: tool.label }],
     supply: [
-      { '@type': 'HowToSupply', name: `A Windows copy of ${gameName}` },
+      {
+        '@type': 'HowToSupply',
+        name: tool.packageKind === 'nucleus' ? `A Windows copy of ${gameName}` : `A copy of ${gameName}`,
+      },
       { '@type': 'HowToSupply', name: 'One controller, or one keyboard and mouse, per player' },
     ],
     step: steps.map((s, i) => ({

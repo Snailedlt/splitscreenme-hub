@@ -3,6 +3,7 @@ import { CommentForm } from '@/components/interactive/CommentForm';
 import { StarButton } from '@/components/interactive/StarButton';
 import { Breadcrumbs, DateTime, Icon, LinkButton, SafeMarkdown, type Crumb } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { getClient } from '@/lib/clients';
 import { genreInfo } from '@/lib/genres';
 import { howToHeading, inputPhrase, playersPhrase, type HowToStep } from '@/lib/seo/game';
 import { apiDownloadUrl, paths } from '@/lib/urls';
@@ -94,6 +95,7 @@ export function HandlerView({
             <p className="hub-handler-line">
               {mode === 'game' ? <>Handler “{h.title}”</> : 'Handler'} by{' '}
               {authorHref ? <Link href={authorHref}>{h.authorName}</Link> : h.authorName}, version {h.version}
+              , made for {getClient(h.client).label}
             </p>
           </div>
         </div>
@@ -107,9 +109,9 @@ export function HandlerView({
               What works
             </h2>
             <p className="hub-intro">
-              With Nucleus Co-op, {playersPhrase(h.maxPlayers)} can play {game.name} together on one PC, each
-              in their own part of the screen{inputs ? `, ${inputs}` : ''}. The free community handler “
-              {h.title}” by {h.authorName} does the setup
+              With {getClient(h.client).label}, {playersPhrase(h.maxPlayers)} can play {game.name} together on
+              one PC, each in their own part of the screen{inputs ? `, ${inputs}` : ''}. The free community
+              handler “{h.title}” by {h.authorName} does the setup
               {h.verified ? ' and was checked by hub moderators' : ''}: version {h.version}, updated{' '}
               <DateTime value={h.currentVersion.createdAt} />.
               {genres.length > 0 && (
@@ -133,14 +135,19 @@ export function HandlerView({
             <h2 className="h2" id="how-to-title">
               {howToHeading(game.name)}
             </h2>
-            <HowToSteps steps={steps} handlerId={h.id} />
+            <HowToSteps steps={steps} handlerId={h.id} client={h.client} />
           </section>
 
           <section className="pane hub-section" aria-labelledby="h-needs">
             <h2 className="h3" id="h-needs">
               What you need
             </h2>
-            <Requirements gameName={game.name} maxPlayers={h.maxPlayers} inputs={h.inputs} />
+            <Requirements
+              gameName={game.name}
+              maxPlayers={h.maxPlayers}
+              inputs={h.inputs}
+              client={h.client}
+            />
           </section>
 
           <section className="pane hub-section" aria-labelledby="h-notes">

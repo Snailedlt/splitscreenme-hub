@@ -56,7 +56,7 @@ export default async function GamePage({ params, searchParams }: Props) {
       <JsonLd
         data={[
           videoGameJsonLd(game, data.handler, gameMetaDescription(data.handler)),
-          howToJsonLd(game.name, steps, pagePath),
+          howToJsonLd(game.name, steps, pagePath, data.handler.client),
           breadcrumbJsonLd(crumbs),
         ]}
       />

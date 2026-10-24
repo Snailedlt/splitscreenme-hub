@@ -1,5 +1,7 @@
+import { CLIENT_IDS, CLIENTS, isClientId, type ClientId } from '@/lib/clients';
+
 /**
- * Catalogue URL state (`/hub?q=&players=&input=&verified=&sort=&page=`): parsing and clean URLs. Shared by
+ * Catalogue URL state (`/hub?q=&client=&players=&input=&verified=&sort=&page=`): parsing and clean URLs. Shared by
  * the server pages and the client form, so no server-only imports here. Same parameter names and values as
  * GET /api/v3/handlers.
  */
@@ -10,6 +12,8 @@ export type SortValue = 'trending' | 'downloads' | 'updated' | 'newest' | 'az' |
 
 export interface CatalogueQuery {
   q: string;
+  /** only handlers made for this tool; null = every tool */
+  client: ClientId | null;
   players: PlayersValue | null;
   inputs: InputValue[];
   verified: boolean;
@@ -20,6 +24,12 @@ export interface CatalogueQuery {
 export const PAGE_SIZE = 48;
 export const MAX_PAGE = 500;
 export const Q_MAX = 100;
+
+export const CLIENT_OPTIONS: { value: ClientId; label: string; long: string }[] = CLIENT_IDS.map((id) => ({
+  value: id,
+  label: CLIENTS[id].label,
+  long: `Made for ${CLIENTS[id].label}`,
+}));
 
 export const PLAYER_OPTIONS: { value: PlayersValue; label: string; long: string }[] = [
   { value: '2', label: '2', long: '2 players' },
@@ -45,6 +55,7 @@ export const SORT_OPTIONS: { value: SortValue; label: string }[] = [
 
 export const DEFAULT_QUERY: CatalogueQuery = {
   q: '',
+  client: null,
   players: null,
   inputs: [],
   verified: false,
@@ -65,12 +76,14 @@ const first = (raw: RawParams, key: string) => all(raw, key)[0];
 export function parseCatalogueQuery(raw: RawParams): CatalogueQuery {
   const q = (first(raw, 'q') ?? '').replace(/\s+/g, ' ').trim().slice(0, Q_MAX);
   const players = first(raw, 'players');
+  const client = first(raw, 'client');
   const inputs = new Set(all(raw, 'input'));
   const sort = first(raw, 'sort');
   const verified = first(raw, 'verified');
   const page = Number.parseInt(first(raw, 'page') ?? '', 10);
   return {
     q,
+    client: isClientId(client) ? client : null,
     players: PLAYER_OPTIONS.some((o) => o.value === players) ? (players as PlayersValue) : null,
     inputs: INPUT_OPTIONS.map((o) => o.value).filter((v) => inputs.has(v)),
     verified: verified === '1' || verified === 'true',
@@ -83,6 +96,7 @@ export function parseCatalogueQuery(raw: RawParams): CatalogueQuery {
 export function catalogueSearch(query: Partial<CatalogueQuery>): string {
   const p = new URLSearchParams();
   if (query.q) p.set('q', query.q);
+  if (query.client) p.set('client', query.client);
   if (query.players) p.set('players', query.players);
   for (const i of INPUT_OPTIONS) if (query.inputs?.includes(i.value)) p.append('input', i.value);
   if (query.verified) p.set('verified', '1');
@@ -100,4 +114,4 @@ export function catalogueHref(base: string, query: CatalogueQuery, patch: Partia
 
 /** Any filter, search or non-default sort: such variants are `noindex,follow` with the base canonical. */
 export const isRefined = (q: CatalogueQuery) =>
-  !!q.q || !!q.players || q.inputs.length > 0 || q.verified || q.sort !== 'trending';
+  !!q.q || !!q.client || !!q.players || q.inputs.length > 0 || q.verified || q.sort !== 'trending';

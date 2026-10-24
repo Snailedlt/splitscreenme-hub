@@ -11,7 +11,8 @@ function syncFields(form: HTMLFormElement, query: CatalogueQuery) {
   for (const el of Array.from(form.elements) as Field[]) {
     if (el === document.activeElement || !('name' in el)) continue;
     if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
-      if (el.name === 'players') el.checked = el.value === (query.players ?? '');
+      if (el.name === 'client') el.checked = el.value === (query.client ?? '');
+      else if (el.name === 'players') el.checked = el.value === (query.players ?? '');
       else if (el.name === 'input') el.checked = query.inputs.includes(el.value as never);
       else if (el.name === 'verified') el.checked = query.verified;
     } else if (el.name === 'q') {

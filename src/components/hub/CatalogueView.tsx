@@ -7,6 +7,7 @@ import type { GenreCount, Page, PublicHandler } from '@/server/public/types';
 import { CatalogueEnhancer } from './CatalogueEnhancer';
 import {
   catalogueHref,
+  CLIENT_OPTIONS,
   INPUT_OPTIONS,
   isRefined,
   PAGE_SIZE,
@@ -51,12 +52,21 @@ export function CatalogueView({
 }) {
   const pageCount = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
   const refined = isRefined(query);
-  const activeFilters = (query.players ? 1 : 0) + query.inputs.length + (query.verified ? 1 : 0);
+  const activeFilters =
+    (query.client ? 1 : 0) + (query.players ? 1 : 0) + query.inputs.length + (query.verified ? 1 : 0);
   const first = (query.page - 1) * PAGE_SIZE + 1;
   const last = first + result.items.length - 1;
 
   const tokens: { label: string; href: string }[] = [
     ...(query.q ? [{ label: `“${query.q}”`, href: catalogueHref(base, query, { q: '' }) }] : []),
+    ...(query.client
+      ? [
+          {
+            label: CLIENT_OPTIONS.find((o) => o.value === query.client)!.long,
+            href: catalogueHref(base, query, { client: null }),
+          },
+        ]
+      : []),
     ...(query.players
       ? [
           {
@@ -141,6 +151,28 @@ export function CatalogueView({
               <Icon name="chev-d" className="chev" />
             </summary>
             <div className="hub-filters-body">
+              <fieldset className="hub-fgroup">
+                <legend>Made for</legend>
+                <div className="hub-seg">
+                  <label>
+                    <input type="radio" name="client" value="" defaultChecked={!query.client} />
+                    Any
+                  </label>
+                  {CLIENT_OPTIONS.map((o) => (
+                    <label key={o.value} title={o.long}>
+                      <input
+                        type="radio"
+                        name="client"
+                        value={o.value}
+                        defaultChecked={query.client === o.value}
+                      />
+                      {o.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="hub-hint">The split-screen tool that runs the handler.</p>
+              </fieldset>
+
               <fieldset className="hub-fgroup">
                 <legend>Maximum players</legend>
                 <div className="hub-seg">

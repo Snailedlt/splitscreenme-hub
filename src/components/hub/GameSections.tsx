@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { DEFAULT_CLIENT, getClient, type ClientId, type ClientInfo } from '@/lib/clients';
 import type { HowToStep } from '@/lib/seo/game';
 import { apiDownloadUrl, paths } from '@/lib/urls';
 import type { Inputs } from '@/server/public/types';
@@ -44,17 +45,32 @@ export function CompatTable({
 }
 
 /** The numbered setup steps (ids step-1..n, the HowTo JSON-LD points at them). */
-export function HowToSteps({ steps, handlerId }: { steps: HowToStep[]; handlerId: string }) {
+export function HowToSteps({
+  steps,
+  handlerId,
+  client = DEFAULT_CLIENT,
+}: {
+  steps: HowToStep[];
+  handlerId: string;
+  client?: ClientId;
+}) {
+  const tool = getClient(client);
   const extra: Record<number, ReactNode> = {
     0: (
       <p className="tip">
-        <Link href={paths.download()}>Download Nucleus Co-op</Link>
+        {tool.packageKind === 'nucleus' ? (
+          <Link href={paths.download()}>Download {tool.label}</Link>
+        ) : (
+          <a href={tool.homepage} rel="noopener nofollow">
+            Get {tool.label}
+          </a>
+        )}
       </p>
     ),
     1: (
       <p className="tip">
         <a href={apiDownloadUrl(handlerId)} rel="nofollow">
-          Download the handler file (.nc)
+          Download the handler file ({tool.extension})
         </a>
       </p>
     ),
@@ -78,11 +94,15 @@ export function Requirements({
   gameName,
   maxPlayers,
   inputs,
+  client = DEFAULT_CLIENT,
 }: {
   gameName: string;
   maxPlayers: number;
   inputs: Inputs;
+  client?: ClientId;
 }) {
+  const tool = getClient(client);
+  if (tool.packageKind !== 'nucleus') return <OtherToolRequirements gameName={gameName} tool={tool} />;
   const devices =
     inputs.controllers === false && inputs.multiKeyboardMouse
       ? 'One keyboard and mouse per player.'
@@ -155,6 +175,51 @@ export function Requirements({
             Nucleus links the windows through the game&apos;s own LAN or online mode; the handler takes care
             of it.
           </p>
+        </div>
+      </li>
+    </ul>
+  );
+}
+
+/**
+ * "What you need" for a tool the hub only links to: what its own documentation says about the computer, the
+ * tool and its handlers. The hub does not claim more than that.
+ */
+function OtherToolRequirements({ gameName, tool }: { gameName: string; tool: ClientInfo }) {
+  return (
+    <ul className="hub-needs">
+      <li>
+        <Icon name="monitor" />
+        <div>
+          <b>A {tool.platform} computer</b>
+          <p>{tool.platformNote ?? `${tool.label} runs on ${tool.platform}.`}</p>
+        </div>
+      </li>
+      <li>
+        <Icon name="library" />
+        <div>
+          <b>{gameName}</b>
+          <p>
+            Installed on that computer. {tool.label} starts every player&apos;s window from that one install.
+          </p>
+        </div>
+      </li>
+      <li>
+        <Icon name="download" />
+        <div>
+          <b>{tool.label}, free</b>
+          <p>
+            <a href={tool.homepage} rel="noopener nofollow">
+              Get {tool.label}
+            </a>
+          </p>
+        </div>
+      </li>
+      <li>
+        <Icon name="pad" />
+        <div>
+          <b>Something to play with</b>
+          <p>One input device per player. The handler notes say which ones this handler supports.</p>
         </div>
       </li>
     </ul>
