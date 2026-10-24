@@ -12,6 +12,7 @@ export async function listMyHandlers(ownerId: string) {
   const rows = await db
     .select({
       id: handlers.id,
+      client: handlers.client,
       title: handlers.title,
       gameName: games.name,
       gameSlug: games.slug,
@@ -49,6 +50,7 @@ export async function getHandlerForEdit(actor: Actor, handlerId: string) {
   const [h] = await db
     .select({
       id: handlers.id,
+      client: handlers.client,
       title: handlers.title,
       description: handlers.description,
       maxPlayers: handlers.maxPlayers,

@@ -50,6 +50,8 @@ export const reportReason = pgEnum('report_reason', [
   'other',
 ]);
 export const reportStatus = pgEnum('report_status', ['open', 'resolved', 'dismissed']);
+// The split-screen tool a handler is for. Keep in sync with CLIENT_IDS in src/lib/clients.ts.
+export const handlerClient = pgEnum('handler_client', ['nucleus', 'partydeck']);
 
 // ---------- accounts ----------
 export const users = pgTable(
@@ -192,6 +194,9 @@ export const handlers = pgTable(
     ownerId: text()
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    // Which tool this handler is for; fixed at creation because it decides the package type. Every handler
+    // that existed before the hub hosted other tools is a Nucleus Co-op handler (default).
+    client: handlerClient().notNull().default('nucleus'),
     title: text().notNull(),
     description: text().notNull().default(''), // markdown, max 10 000 chars
     maxPlayers: smallint().notNull().default(2),
@@ -221,6 +226,7 @@ export const handlers = pgTable(
   },
   (t) => [
     index('handlers_game_idx').on(t.gameId),
+    index('handlers_client_idx').on(t.client),
     index('handlers_owner_idx').on(t.ownerId),
     index('handlers_listed_trend_idx')
       .on(t.trendScore.desc())

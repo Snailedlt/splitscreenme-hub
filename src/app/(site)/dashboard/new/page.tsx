@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { HandlerMetaFields } from '@/components/dashboard/HandlerMetaFields';
-import { ActionForm, FieldErrors } from '@/components/interactive/ActionForm';
+import { ActionForm, FieldErrors, SelectField } from '@/components/interactive/ActionForm';
 import { CoverImage, EmptyState, Field, Icon, LinkButton } from '@/components/ui';
 import { canPost, requireUser } from '@/lib/auth/current-user';
+import { CLIENT_IDS, CLIENTS, DEFAULT_CLIENT } from '@/lib/clients';
 import { igdbEnabled } from '@/lib/env';
 import { releaseYearOf, searchGames, type IgdbGame } from '@/lib/igdb';
 import { log } from '@/lib/log';
@@ -158,6 +159,16 @@ export default async function NewHandlerPage({ searchParams }: { searchParams: P
             <h2 className="h2" id="details-step">
               2. The handler
             </h2>
+            <SelectField
+              name="client"
+              label="Made for"
+              defaultValue={DEFAULT_CLIENT}
+              options={CLIENT_IDS.map((id) => ({
+                value: id,
+                label: `${CLIENTS[id].label} (${CLIENTS[id].platform}, ${CLIENTS[id].extension} package)`,
+              }))}
+              hint="The split-screen tool that runs this handler. It decides which package you upload, and it cannot be changed afterwards."
+            />
             <HandlerMetaFields defaults={{ title: choices[0]?.name }} />
           </ActionForm>
         </section>

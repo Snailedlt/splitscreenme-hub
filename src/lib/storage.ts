@@ -31,8 +31,9 @@ export function absolutePath(key: string): string {
   return full;
 }
 
-export const packageKey = (handlerId: string, versionId: string) =>
-  assertKey(`packages/${handlerId}/${versionId}.nc`);
+/** `extension` is the one of the handler's tool (`.nc`, `.pd2`, see `CLIENTS`); Nucleus Co-op when omitted. */
+export const packageKey = (handlerId: string, versionId: string, extension = '.nc') =>
+  assertKey(`packages/${handlerId}/${versionId}${extension}`);
 
 /** A fresh path under uploads/ for an incoming file (the directory is created). */
 export async function tempPath(): Promise<string> {

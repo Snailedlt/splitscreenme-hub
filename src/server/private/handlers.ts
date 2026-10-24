@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { games, handlerVersions, handlers, users } from '@/db/schema';
 import { audit } from '@/lib/audit';
 import { can, type Actor } from '@/lib/auth/permissions';
+import { DEFAULT_CLIENT, type ClientId } from '@/lib/clients';
 import { igdbEnabled } from '@/lib/env';
 import { newId } from '@/lib/ids';
 import { hit } from '@/lib/rate-limit';
@@ -67,6 +68,7 @@ export async function loadEditable(actor: Actor, handlerId: string, opts: { incl
   const [h] = await db
     .select({
       id: handlers.id,
+      client: handlers.client,
       ownerId: handlers.ownerId,
       isPublic: handlers.isPublic,
       approvedAt: handlers.approvedAt,
@@ -97,7 +99,14 @@ function invalidateHandler(h: { id: string; gameSlug: string }) {
 
 export async function createHandler(
   viewer: Viewer & { trustedAuthor: boolean },
-  input: { gameId?: number | null; igdbId?: number | null; meta: HandlerMeta; ip: string },
+  input: {
+    gameId?: number | null;
+    igdbId?: number | null;
+    /** the split-screen tool the handler is for; fixed from now on, it decides the package type */
+    client?: ClientId;
+    meta: HandlerMeta;
+    ip: string;
+  },
 ): Promise<Result<{ id: string }>> {
   if (!can(viewer, 'handler.create')) return fail('You cannot create handlers.');
   if (!canPostAs(viewer)) {
@@ -129,6 +138,7 @@ export async function createHandler(
       id,
       gameId: gameId!,
       ownerId: viewer.id,
+      client: input.client ?? DEFAULT_CLIENT,
       ...metaColumns(input.meta),
       isPublic: false,
       approvedAt: viewer.trustedAuthor ? now : null,
@@ -138,7 +148,7 @@ export async function createHandler(
       actor: viewer,
       action: 'handler.create',
       target: { type: 'handler', id },
-      details: { gameId, autoApproved: viewer.trustedAuthor },
+      details: { gameId, client: input.client ?? DEFAULT_CLIENT, autoApproved: viewer.trustedAuthor },
       ip: input.ip,
     });
   });

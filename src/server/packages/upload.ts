@@ -5,12 +5,14 @@ import { db } from '@/db';
 import { games, handlerVersions, handlers, users } from '@/db/schema';
 import { audit } from '@/lib/audit';
 import { can } from '@/lib/auth/permissions';
+import { getClient, packageFileName } from '@/lib/clients';
 import { env } from '@/lib/env';
 import { newId } from '@/lib/ids';
 import { log } from '@/lib/log';
 import { absolutePath, commit, packageKey, tempPath } from '@/lib/storage';
 import { invalidate, TAGS } from '@/server/cache';
 import { PACKAGE_LIMITS, PackageError, RELEASE_NOTES_MAX, RELEASE_NOTES_MIN } from './limits';
+import { copyOpaquePackage } from './opaque';
 import { uploadMutex } from './semaphore';
 import { stampScript } from './stamp';
 import { inspectPackage, rebuildPackage, type ManifestEntry } from './zip';
@@ -46,6 +48,9 @@ export interface UploadOutcome {
 /**
  * Validates, stamps and stores an uploaded package as the handler's new current version (section 6.3,
  * steps 3 to 8). `tempFile` is always removed. One upload runs at a time.
+ *
+ * What happens to the file depends on the handler's tool (section 12): a Nucleus Co-op package is inspected,
+ * stamped and rebuilt; a package of a tool the hub does not read is hashed and stored as it is.
  */
 export async function processUpload(input: {
   actor: { id: string; role: 'user' | 'moderator' | 'admin' };
@@ -67,6 +72,7 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
   const [h] = await db
     .select({
       id: handlers.id,
+      client: handlers.client,
       ownerId: handlers.ownerId,
       ownerName: users.username,
       deletedAt: handlers.deletedAt,
@@ -84,27 +90,34 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
     throw new PackageError('missing_handler', 'Handler not found.');
   }
 
-  const inspection = await inspectPackage(input.tempFile);
+  const client = getClient(h.client);
+  // Nucleus Co-op: read handler.js and rebuild the zip with the stamp. Other tools: nothing is read.
+  const inspection = client.packageKind === 'nucleus' ? await inspectPackage(input.tempFile) : null;
   const version = h.next;
-  const script = stampScript(inspection.script, {
-    version,
-    handlerId: h.id,
-    ownerName: h.ownerName,
-    ownerId: h.ownerId,
-    siteUrl: env().SITE_URL,
-    date: new Date(),
-  });
-  if (Buffer.byteLength(script, 'utf8') > PACKAGE_LIMITS.maxScriptBytes + 1024) {
+  const script = inspection
+    ? stampScript(inspection.script, {
+        version,
+        handlerId: h.id,
+        ownerName: h.ownerName,
+        ownerId: h.ownerId,
+        siteUrl: env().SITE_URL,
+        date: new Date(),
+      })
+    : '';
+  if (inspection && Buffer.byteLength(script, 'utf8') > PACKAGE_LIMITS.maxScriptBytes + 1024) {
     throw new PackageError('handler_too_large', 'handler.js is larger than 2 MiB.');
   }
+  const manifest: ManifestEntry[] = inspection?.manifest ?? [];
 
   const versionId = newId();
-  const key = packageKey(h.id, versionId);
+  const key = packageKey(h.id, versionId, client.extension);
   const built = await tempPath();
   let committed = false;
   try {
-    const { sha256, sizeBytes } = await rebuildPackage(input.tempFile, built, inspection, script);
-    const summary = manifestSummary(inspection.manifest);
+    const { sha256, sizeBytes } = inspection
+      ? await rebuildPackage(input.tempFile, built, inspection, script)
+      : await copyOpaquePackage(input.tempFile, built);
+    const summary = manifestSummary(manifest);
     await db.transaction(async (tx) => {
       // The number was computed before the rebuild; re-check it under the row lock.
       const [locked] = await tx
@@ -127,11 +140,11 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
         releaseNotes: input.releaseNotes,
         uploaderId: input.actor.id,
         storageKey: key,
-        fileName: `handler-${h.id}-v${version}.nc`,
+        fileName: packageFileName(client.id, h.id, version),
         sizeBytes,
         sha256,
         script,
-        manifest: inspection.manifest,
+        manifest,
       });
       await tx
         .update(handlers)
@@ -141,7 +154,7 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
         actor: input.actor,
         action: 'version.upload',
         target: { type: 'version', id: versionId },
-        details: { handlerId: h.id, version, sizeBytes, ...summary },
+        details: { handlerId: h.id, client: client.id, version, sizeBytes, ...summary },
         ip: input.ip,
       });
       // Last step inside the transaction: a failed rename rolls the rows back.

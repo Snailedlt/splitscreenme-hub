@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/current-user';
+import { DEFAULT_CLIENT, isClientId } from '@/lib/clients';
 import { isValidId } from '@/lib/ids';
 import { paths } from '@/lib/urls';
 import { requestIp } from '@/server/auth/request-context';
@@ -35,12 +36,20 @@ export async function createHandlerAction(_prev: ActionState, fd: FormData): Pro
   // game = "g:<id>" (already on the hub) or "i:<igdbId>" (from IGDB)
   const game = text(fd, 'game');
   const m = /^(g|i):(\d{1,10})$/.exec(game);
-  const fields = { ...(meta.ok ? {} : meta.fields), ...(m ? {} : { game: ['Pick a game.'] }) };
-  if (!meta.ok || !m) return errorState('Please fix the fields below.', fields);
+  // The tool decides the package type and cannot be changed later; a missing field means Nucleus Co-op.
+  const clientRaw = text(fd, 'client') || DEFAULT_CLIENT;
+  const client = isClientId(clientRaw) ? clientRaw : null;
+  const fields = {
+    ...(meta.ok ? {} : meta.fields),
+    ...(m ? {} : { game: ['Pick a game.'] }),
+    ...(client ? {} : { client: ['Pick a tool.'] }),
+  };
+  if (!meta.ok || !m || !client) return errorState('Please fix the fields below.', fields);
   const id = Number(m[2]);
   const result = await createHandler(user, {
     gameId: m[1] === 'g' ? id : null,
     igdbId: m[1] === 'i' ? id : null,
+    client,
     meta: meta.value,
     ip: await requestIp(),
   });

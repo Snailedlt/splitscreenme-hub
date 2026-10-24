@@ -63,7 +63,12 @@ export default async function VersionsPage({
 
       <Section title={`Upload version ${nextVersion}`} id="upload">
         {canPost(user) ? (
-          <UploadForm handlerId={h.id} nextVersion={nextVersion} maxBytes={PACKAGE_LIMITS.maxUploadBytes} />
+          <UploadForm
+            handlerId={h.id}
+            nextVersion={nextVersion}
+            maxBytes={PACKAGE_LIMITS.maxUploadBytes}
+            client={h.client}
+          />
         ) : (
           <p className="small">
             Confirm your email address or link a provider on your account page before uploading.

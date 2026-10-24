@@ -5,6 +5,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import busboy from 'busboy';
+import { acceptsUpload, DEFAULT_CLIENT, uploadExtensionsLabel, type ClientId } from '@/lib/clients';
 import { tempPath } from '@/lib/storage';
 import { PACKAGE_LIMITS, PackageError } from './limits';
 
@@ -34,6 +35,8 @@ const FIELD_NAMES = new Set(['releaseNotes']);
 export async function receiveUpload(
   req: Request,
   maxBytes: number = PACKAGE_LIMITS.maxUploadBytes,
+  /** the tool of the handler: decides which file names are accepted */
+  client: ClientId = DEFAULT_CLIENT,
 ): Promise<ReceivedUpload> {
   const type = req.headers.get('content-type') ?? '';
   if (!type.toLowerCase().startsWith('multipart/form-data')) {
@@ -67,9 +70,9 @@ export async function receiveUpload(
         return;
       }
       fileName = info.filename ?? '';
-      if (!/\.(nc|zip)$/i.test(fileName)) {
+      if (!acceptsUpload(client, fileName)) {
         stream.resume();
-        reject(new UploadRequestError(400, 'Upload a .nc (or .zip) package.'));
+        reject(new UploadRequestError(400, `Upload a ${uploadExtensionsLabel(client)} package.`));
         return;
       }
       stream.on('limit', () => {

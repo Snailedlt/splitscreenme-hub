@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
+import { CLIENTS, DEFAULT_CLIENT, uploadExtensionsLabel, type ClientId } from '@/lib/clients';
 
 type Status =
   | { kind: 'idle' }
@@ -13,17 +14,22 @@ type Status =
 
 /**
  * Uploads a package to /api/me/handlers/<id>/versions. With JavaScript: XHR (upload progress), answer
- * shown in place. Without: a plain multipart POST, the route redirects back here.
+ * shown in place. Without: a plain multipart POST, the route redirects back here. The package type follows
+ * the handler's tool: a Nucleus Co-op zip with handler.js is stamped, another tool's file is stored as is.
  */
 export function UploadForm({
   handlerId,
   nextVersion,
   maxBytes,
+  client = DEFAULT_CLIENT,
 }: {
   handlerId: string;
   nextVersion: number;
   maxBytes: number;
+  client?: ClientId;
 }) {
+  const tool = CLIENTS[client];
+  const stamped = tool.packageKind === 'nucleus';
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -35,7 +41,13 @@ export function UploadForm({
     if (busy) return;
     const form = e.currentTarget;
     const file = (form.elements.namedItem('package') as HTMLInputElement).files?.[0];
-    if (!file) return setStatus({ kind: 'error', message: 'Choose a .nc package.', field: 'package' });
+    if (!file) {
+      return setStatus({
+        kind: 'error',
+        message: `Choose a ${uploadExtensionsLabel(client)} package.`,
+        field: 'package',
+      });
+    }
     if (file.size > maxBytes) {
       return setStatus({ kind: 'error', message: 'The package is larger than 30 MiB.', field: 'package' });
     }
@@ -91,20 +103,30 @@ export function UploadForm({
       aria-busy={busy || undefined}
     >
       <div className="form-field">
-        <label htmlFor="package">Package (.nc)</label>
+        <label htmlFor="package">Package ({tool.extension})</label>
         <input
           id="package"
           name="package"
           type="file"
-          accept=".nc,.zip,application/zip"
+          accept={tool.uploadExtensions.join(',')}
           required
           className="control"
           aria-invalid={status.kind === 'error' && status.field === 'package' ? true : undefined}
           aria-describedby="package-hint"
         />
         <p className="form-hint" id="package-hint">
-          A zip with <code>handler.js</code> at its root, 30 MiB at most, no symbolic links. We stamp it as
-          version {nextVersion} (<code>Hub.Handler.Version</code>, <code>Hub.Handler.Id</code>, maintainer).
+          {stamped ? (
+            <>
+              A zip with <code>handler.js</code> at its root, 30 MiB at most, no symbolic links. We stamp it
+              as version {nextVersion} (<code>Hub.Handler.Version</code>, <code>Hub.Handler.Id</code>,
+              maintainer).
+            </>
+          ) : (
+            <>
+              The {tool.label} package file, 30 MiB at most. The hub does not open it: it is stored and served
+              as it is, as version {nextVersion}, and a moderator checks it before it is marked verified.
+            </>
+          )}
         </p>
       </div>
       <div className="form-field">
@@ -133,7 +155,7 @@ export function UploadForm({
         )}
         {status.kind === 'processing' && (
           <span className="small muted" role="status">
-            Checking and stamping the package…
+            {stamped ? 'Checking and stamping the package…' : 'Storing the package…'}
           </span>
         )}
       </div>

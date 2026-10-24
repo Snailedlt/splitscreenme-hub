@@ -63,7 +63,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   let received;
   try {
-    received = await receiveUpload(req);
+    received = await receiveUpload(req, undefined, handler.client);
   } catch (err) {
     if (err instanceof UploadRequestError) return answer(err.status, { ok: false, message: err.message });
     if (isPackageError(err)) return answer(413, { ok: false, code: err.code, message: err.message });
