@@ -123,8 +123,9 @@ export function UploadForm({
             </>
           ) : (
             <>
-              The {tool.label} package file, 30 MiB at most. The hub does not open it: it is stored and served
-              as it is, as version {nextVersion}, and a moderator checks it before it is marked verified.
+              A zip with <code>handler.json</code> at its root, 30 MiB at most, no symbolic links. The hub
+              checks it and stores it exactly as you upload it, as version {nextVersion}; a moderator checks
+              it before it is marked verified.
             </>
           )}
         </p>
@@ -155,7 +156,7 @@ export function UploadForm({
         )}
         {status.kind === 'processing' && (
           <span className="small muted" role="status">
-            {stamped ? 'Checking and stamping the package…' : 'Storing the package…'}
+            {stamped ? 'Checking and stamping the package…' : 'Checking and storing the package…'}
           </span>
         )}
       </div>

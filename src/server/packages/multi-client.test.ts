@@ -88,7 +88,7 @@ describe.runIf(dbAvailable())('handlers of other tools', () => {
     expect(log?.details).toMatchObject({ client: 'partydeck' });
   });
 
-  it('stores a PartyDeck package exactly as uploaded: no stamp, no script, no rebuilt zip', async () => {
+  it('checks a PartyDeck package, then stores it exactly as uploaded: no stamp, no script, same bytes', async () => {
     const owner = asViewer(await makeUser({ username: 'deckmaker' }));
     const gameId = (await makeHandler(owner.id)).gameId;
     const created = await createHandler(
@@ -97,10 +97,11 @@ describe.runIf(dbAvailable())('handlers of other tools', () => {
     );
     const id = created.ok ? created.value.id : '';
 
-    // Even a real zip with a handler.js inside is left alone: the hub does not read this tool's packages.
     const bytes = buildZip([
-      { name: 'handler.js', data: VALID_SCRIPT },
-      { name: 'run.exe', data: 'MZ' },
+      { name: 'handler.json', data: JSON.stringify({ name: 'Deck game', spec_ver: 3, steam_appid: 12 }) },
+      { name: 'overlay/partydeckrun.sh', data: '#!/bin/bash\n' },
+      { name: 'overlay/server/Server.dll', data: 'MZ' },
+      { name: 'icon.png', data: Buffer.from([0x89, 0x50]) },
     ]);
     const tmp = await tempPath();
     await writeFile(tmp, bytes);
@@ -112,13 +113,18 @@ describe.runIf(dbAvailable())('handlers of other tools', () => {
       ip: '1',
     });
     expect(out.version).toBe(1);
-    expect(out.executables).toBe(0);
+    expect(out.executables).toBe(2); // the .sh and the .dll are what a moderator looks at
 
     const [v] = await getDb().select().from(handlerVersions).where(eq(handlerVersions.id, out.versionId));
     expect(v?.storageKey).toBe(`packages/${id}/${out.versionId}.pd2`);
     expect(v?.fileName).toBe(`handler-${id}-v1.pd2`);
     expect(v?.script).toBe('');
-    expect(v?.manifest).toEqual([]);
+    expect(v?.manifest.map((m) => m.path)).toEqual([
+      'handler.json',
+      'icon.png',
+      'overlay/partydeckrun.sh',
+      'overlay/server/Server.dll',
+    ]);
     expect(v?.verifiedAt).toBeNull();
     expect(v?.sizeBytes).toBe(bytes.length);
     const stored = await readFile(absolutePath(v!.storageKey));
@@ -128,11 +134,16 @@ describe.runIf(dbAvailable())('handlers of other tools', () => {
     const [h] = await getDb().select().from(handlers).where(eq(handlers.id, id));
     expect(h?.currentVersionId).toBe(out.versionId);
     const [log] = await getDb().select().from(auditLog).where(eq(auditLog.action, 'version.upload'));
-    expect(log?.details).toMatchObject({ client: 'partydeck', files: 0 });
+    expect(log?.details).toMatchObject({
+      client: 'partydeck',
+      files: 4,
+      executables: 2,
+      archive: { name: 'Deck game', specVer: 3, steamAppId: 12 },
+    });
 
     // A second upload is version 2, and a moderator can verify it like any other.
     const tmp2 = await tempPath();
-    await writeFile(tmp2, Buffer.from([9, 9, 9]));
+    await writeFile(tmp2, bytes);
     const second = await processUpload({
       actor: owner,
       handlerId: id,
@@ -143,6 +154,40 @@ describe.runIf(dbAvailable())('handlers of other tools', () => {
     expect(second.version).toBe(2);
     const mod = asViewer(await makeUser({ role: 'moderator' }));
     expect((await setVersionVerified(mod, second.versionId, true, '1')).ok).toBe(true);
+  });
+
+  it('refuses a PartyDeck package without a usable handler.json, and records nothing', async () => {
+    const owner = asViewer(await makeUser());
+    const gameId = (await makeHandler(owner.id)).gameId;
+    const created = await createHandler(
+      { ...owner, trustedAuthor: false },
+      { gameId, client: 'partydeck', meta: meta(), ip: '1' },
+    );
+    const id = created.ok ? created.value.id : '';
+    const upload = async (data: Buffer) => {
+      const tmp = await tempPath();
+      await writeFile(tmp, data);
+      return processUpload({ actor: owner, handlerId: id, tempFile: tmp, releaseNotes: 'x', ip: '1' });
+    };
+    await expect(upload(Buffer.alloc(0))).rejects.toMatchObject({ code: 'not_zip' });
+    await expect(upload(Buffer.from([1, 2, 3, 4, 5, 6]))).rejects.toMatchObject({ code: 'not_zip' });
+    // A Nucleus Co-op package is not a PartyDeck one.
+    await expect(upload(buildZip([{ name: 'handler.js', data: VALID_SCRIPT }]))).rejects.toMatchObject({
+      code: 'missing_handler',
+    });
+    await expect(upload(buildZip([{ name: 'handler.json', data: '{}' }]))).rejects.toMatchObject({
+      code: 'handler_invalid',
+    });
+    await expect(
+      upload(
+        buildZip([
+          { name: 'handler.json', data: '{"name":"G"}' },
+          { name: 'overlay/../../x', data: 'x' },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: 'unsafe_path' });
+    const versions = await getDb().select().from(handlerVersions).where(eq(handlerVersions.handlerId, id));
+    expect(versions).toHaveLength(0);
   });
 
   it('still reads, stamps and rebuilds a Nucleus Co-op package', async () => {
@@ -167,23 +212,5 @@ describe.runIf(dbAvailable())('handlers of other tools', () => {
     expect(v?.fileName).toBe(`handler-${id}-v1.nc`);
     expect(v?.script).toContain(`Hub.Handler.Id = "${id}";`);
     expect(v?.manifest).toEqual([{ path: 'handler.js', size: expect.any(Number) }]);
-  });
-
-  it('refuses a package of the wrong size or kind of empty', async () => {
-    const owner = asViewer(await makeUser());
-    const gameId = (await makeHandler(owner.id)).gameId;
-    const created = await createHandler(
-      { ...owner, trustedAuthor: false },
-      { gameId, client: 'partydeck', meta: meta(), ip: '1' },
-    );
-    const id = created.ok ? created.value.id : '';
-    const empty = await tempPath();
-    await writeFile(empty, Buffer.alloc(0));
-    await expect(
-      processUpload({ actor: owner, handlerId: id, tempFile: empty, releaseNotes: 'x', ip: '1' }),
-    ).rejects.toMatchObject({ code: 'corrupt' });
-    // nothing was recorded
-    const versions = await getDb().select().from(handlerVersions).where(eq(handlerVersions.handlerId, id));
-    expect(versions).toHaveLength(0);
   });
 });

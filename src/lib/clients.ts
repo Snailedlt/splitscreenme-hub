@@ -16,11 +16,11 @@ export const DEFAULT_CLIENT: ClientId = 'nucleus';
 /**
  * How the hub treats the uploaded file:
  * - `nucleus`: a zip with a root `handler.js` that the hub reads, validates, stamps and rebuilds (6.3).
- * - `opaque`: the tool's own package. The hub checks the size and the extension, hashes and stores the
- *   file as it is, and serves it as a download. It never opens, runs or rewrites it. A moderator verifies it
- *   by hand like any other version.
+ * - `partydeck`: a zip with a root `handler.json`. The hub applies the zip safety rules and checks
+ *   handler.json, lists the files, and then stores and serves the archive exactly as uploaded. It never runs
+ *   or rewrites it, and a moderator verifies it by hand like any other version.
  */
-export type PackageKind = 'nucleus' | 'opaque';
+export type PackageKind = 'nucleus' | 'partydeck';
 
 export interface ClientInfo {
   id: ClientId;
@@ -64,7 +64,7 @@ export const CLIENTS: Record<ClientId, ClientInfo> = {
     label: 'PartyDeck',
     shortLabel: 'PartyDeck',
     platform: 'Linux and SteamOS',
-    packageKind: 'opaque',
+    packageKind: 'partydeck',
     extension: '.pd2',
     uploadExtensions: ['.pd2'],
     contentType: 'application/octet-stream',

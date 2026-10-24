@@ -23,9 +23,9 @@ describe('client registry', () => {
     expect(packageFileName('nucleus', 'abc', 3)).toBe('handler-abc-v3.nc');
   });
 
-  it('serves PartyDeck packages as opaque .pd2 files', () => {
+  it('serves PartyDeck packages as .pd2 files the hub checks but does not rewrite', () => {
     const p = CLIENTS.partydeck;
-    expect(p.packageKind).toBe('opaque');
+    expect(p.packageKind).toBe('partydeck');
     expect(packageFileName('partydeck', 'abc', 3)).toBe('handler-abc-v3.pd2');
     expect(p.contentType).toBe('application/octet-stream');
   });

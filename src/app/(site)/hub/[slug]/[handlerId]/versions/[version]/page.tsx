@@ -52,8 +52,9 @@ export default async function VersionPage({ params }: Props) {
   const scriptUrl = `${apiBase()}/handlers/${encodeURIComponent(h.id)}/versions/${n}/script`;
   const truncated = v.script.length > SCRIPT_PREVIEW_CHARS;
   const tool = getClient(v.client);
-  // Only Nucleus Co-op packages are opened by the hub: the file list and handler.js exist for those alone.
-  const readable = tool.packageKind === 'nucleus';
+  // The hub lists the files of every package it inspected; only Nucleus Co-op packages have a handler.js.
+  const hasScript = tool.packageKind === 'nucleus';
+  const hasFiles = v.manifest.length > 0;
   return (
     <>
       <section className="pane hub-section" aria-labelledby="version-title">
@@ -111,7 +112,7 @@ export default async function VersionPage({ params }: Props) {
         </div>
       </section>
 
-      {readable && (
+      {hasFiles && (
         <>
           <section className="pane hub-section" aria-labelledby="files-title">
             <h2 className="h3" id="files-title">
@@ -136,7 +137,11 @@ export default async function VersionPage({ params }: Props) {
               </tbody>
             </Table>
           </section>
+        </>
+      )}
 
+      {hasScript && (
+        <>
           <section className="pane hub-section" aria-labelledby="script-title">
             <header>
               <h2 className="h3" id="script-title">

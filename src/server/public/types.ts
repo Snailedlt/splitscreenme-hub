@@ -64,7 +64,7 @@ export interface PublicVersionFile extends PublicVersion {
 export interface PublicVersionDetail extends PublicVersion {
   client: ClientId;
   manifest: { path: string; size: number }[];
-  /** stamped handler.js; empty for tools whose package the hub does not read (opaque packages) */
+  /** stamped handler.js; empty for tools whose package has no handler.js (PartyDeck) */
   script: string;
 }
 

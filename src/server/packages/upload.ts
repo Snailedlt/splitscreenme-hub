@@ -12,13 +12,14 @@ import { log } from '@/lib/log';
 import { absolutePath, commit, packageKey, tempPath } from '@/lib/storage';
 import { invalidate, TAGS } from '@/server/cache';
 import { PACKAGE_LIMITS, PackageError, RELEASE_NOTES_MAX, RELEASE_NOTES_MIN } from './limits';
-import { copyOpaquePackage } from './opaque';
+import { copyPackageAsIs } from './as-is';
+import { inspectPartyDeckPackage } from './partydeck';
 import { uploadMutex } from './semaphore';
 import { stampScript } from './stamp';
 import { inspectPackage, rebuildPackage, type ManifestEntry } from './zip';
 
 /** Executable or script files a moderator should look at before verifying. */
-export const RISKY_EXTENSIONS = /\.(exe|dll|bat|cmd|ps1|vbs|scr|com|msi|sys)$/i;
+export const RISKY_EXTENSIONS = /\.(exe|dll|bat|cmd|ps1|vbs|scr|com|msi|sys|sh)$/i;
 
 export function manifestSummary(manifest: ManifestEntry[]) {
   const risky = manifest.filter((m) => RISKY_EXTENSIONS.test(m.path));
@@ -50,7 +51,7 @@ export interface UploadOutcome {
  * steps 3 to 8). `tempFile` is always removed. One upload runs at a time.
  *
  * What happens to the file depends on the handler's tool (section 12): a Nucleus Co-op package is inspected,
- * stamped and rebuilt; a package of a tool the hub does not read is hashed and stored as it is.
+ * stamped and rebuilt; a PartyDeck package is inspected and then hashed and stored as it is.
  */
 export async function processUpload(input: {
   actor: { id: string; role: 'user' | 'moderator' | 'admin' };
@@ -91,8 +92,9 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
   }
 
   const client = getClient(h.client);
-  // Nucleus Co-op: read handler.js and rebuild the zip with the stamp. Other tools: nothing is read.
+  // Nucleus Co-op: read handler.js and rebuild the zip with the stamp. PartyDeck: check handler.json, keep the bytes.
   const inspection = client.packageKind === 'nucleus' ? await inspectPackage(input.tempFile) : null;
+  const archive = client.packageKind === 'partydeck' ? await inspectPartyDeckPackage(input.tempFile) : null;
   const version = h.next;
   const script = inspection
     ? stampScript(inspection.script, {
@@ -107,7 +109,7 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
   if (inspection && Buffer.byteLength(script, 'utf8') > PACKAGE_LIMITS.maxScriptBytes + 1024) {
     throw new PackageError('handler_too_large', 'handler.js is larger than 2 MiB.');
   }
-  const manifest: ManifestEntry[] = inspection?.manifest ?? [];
+  const manifest: ManifestEntry[] = inspection?.manifest ?? archive?.manifest ?? [];
 
   const versionId = newId();
   const key = packageKey(h.id, versionId, client.extension);
@@ -116,7 +118,7 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
   try {
     const { sha256, sizeBytes } = inspection
       ? await rebuildPackage(input.tempFile, built, inspection, script)
-      : await copyOpaquePackage(input.tempFile, built);
+      : await copyPackageAsIs(input.tempFile, built);
     const summary = manifestSummary(manifest);
     await db.transaction(async (tx) => {
       // The number was computed before the rebuild; re-check it under the row lock.
@@ -154,7 +156,20 @@ async function storeVersion(input: Parameters<typeof processUpload>[0]): Promise
         actor: input.actor,
         action: 'version.upload',
         target: { type: 'version', id: versionId },
-        details: { handlerId: h.id, client: client.id, version, sizeBytes, ...summary },
+        details: {
+          handlerId: h.id,
+          client: client.id,
+          version,
+          sizeBytes,
+          ...summary,
+          ...(archive && {
+            archive: {
+              name: archive.meta.name,
+              specVer: archive.meta.specVer,
+              steamAppId: archive.meta.steamAppId,
+            },
+          }),
+        },
         ip: input.ip,
       });
       // Last step inside the transaction: a failed rename rolls the rows back.

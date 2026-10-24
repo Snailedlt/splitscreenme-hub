@@ -6,15 +6,15 @@ import { pipeline } from 'node:stream/promises';
 import { PACKAGE_LIMITS, PackageError } from './limits';
 
 /**
- * Packages of tools whose format the hub does not read (`packageKind: 'opaque'` in src/lib/clients.ts, docs
- * section 12). The hub does not open, run or rewrite them: it copies the upload to its final temp path while
- * hashing it and counting bytes, and the file is then stored and served exactly as it came. A moderator
- * verifies such a version by hand, like any other.
+ * Stores a package exactly as uploaded (`packageKind: 'partydeck'` in src/lib/clients.ts, docs section 12).
+ * The hub does not rewrite these packages: it copies the upload to its final temp path while hashing it and
+ * counting bytes, and the file is then served as it came. (The content was inspected before, see
+ * `inspectPartyDeckPackage`.)
  *
  * The size was already limited while receiving (`receiveUpload`); it is checked again here so this stays safe
  * on its own.
  */
-export async function copyOpaquePackage(
+export async function copyPackageAsIs(
   source: string,
   dest: string,
   maxBytes: number = PACKAGE_LIMITS.maxUploadBytes,

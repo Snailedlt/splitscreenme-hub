@@ -143,7 +143,32 @@ async function assertZipMagic(file: string): Promise<void> {
 const isDirectory = (e: Entry) => e.fileName.endsWith('/');
 const isScriptEntry = (name: string) => name.toLowerCase() === 'handler.js';
 
-export async function inspectPackage(file: string, limits: Limits = PACKAGE_LIMITS): Promise<Inspection> {
+/** One root file the scan keeps in memory (a package's `handler.js`, `handler.json`). */
+export interface CaptureRule {
+  /** Exact entry name (any case) that is wanted; only files, never directories. */
+  match: (name: string) => boolean;
+  maxBytes: number;
+  tooLarge: () => PackageError;
+}
+
+export interface Scan {
+  /** Entries in archive order (directories left out), names as in the zip. */
+  manifest: ManifestEntry[];
+  captured: { name: string; data: Buffer } | null;
+  entryCount: number;
+  totalUncompressed: number;
+}
+
+/**
+ * The checks every package goes through, whatever the tool (docs section 6.3, steps 3 and 4): zip magic,
+ * entry count, names, duplicates, symlinks, encryption, compression method, declared and real sizes, ratios.
+ * One entry (the one `capture` asks for) is kept in memory; everything else is only counted.
+ */
+export async function scanZip(
+  file: string,
+  capture: CaptureRule,
+  limits: Limits = PACKAGE_LIMITS,
+): Promise<Scan> {
   await assertZipMagic(file);
   const zip = await openZip(file);
   try {
@@ -154,8 +179,7 @@ export async function inspectPackage(file: string, limits: Limits = PACKAGE_LIMI
     const manifest: ManifestEntry[] = [];
     const budget = new Budget(limits.maxTotalUncompressed);
     let declared = 0;
-    let script: Buffer | null = null;
-    let scriptEntry = '';
+    let captured: Scan['captured'] = null;
 
     for await (const entry of entries(zip)) {
       const name = entry.fileName;
@@ -185,49 +209,59 @@ export async function inspectPackage(file: string, limits: Limits = PACKAGE_LIMI
         throw new PackageError('zip_bomb', 'A file in the package is compressed suspiciously well.');
       }
 
-      const wantScript = !name.includes('/') && isScriptEntry(name);
-      if (wantScript && entry.uncompressedSize > limits.maxScriptBytes) {
-        throw new PackageError('handler_too_large', 'handler.js is larger than 2 MiB.');
-      }
+      const want = !name.includes('/') && capture.match(name);
+      if (want && entry.uncompressedSize > capture.maxBytes) throw capture.tooLarge();
       const chunks: Buffer[] = [];
       const stream = await openEntry(zip, entry);
       await pipeline(stream, budget.meter(), async (source: AsyncIterable<Buffer>) => {
-        for await (const chunk of source) if (wantScript) chunks.push(chunk);
+        for await (const chunk of source) if (want) chunks.push(chunk);
       }).catch((err: unknown) => {
         throw err instanceof PackageError ? err : mapYauzlError(err as Error);
       });
-      if (wantScript) {
-        script = Buffer.concat(chunks);
-        scriptEntry = name;
-      }
-      manifest.push({ path: wantScript ? 'handler.js' : name, size: entry.uncompressedSize });
+      if (want) captured = { name, data: Buffer.concat(chunks) };
+      manifest.push({ path: name, size: entry.uncompressedSize });
     }
-
-    if (!script) throw new PackageError('missing_handler', 'The package has no handler.js at its root.');
-    let text: string;
-    try {
-      text = new TextDecoder('utf-8', { fatal: true }).decode(script);
-    } catch {
-      throw new PackageError('handler_not_utf8', 'handler.js is not valid UTF-8 text.');
-    }
-    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-    if (!declaresGame(text)) {
-      throw new PackageError(
-        'handler_missing_game',
-        'handler.js must set Game.GameName or Game.ExecutableName (the app refuses packages without them).',
-      );
-    }
-    manifest.sort((a, b) => a.path.localeCompare(b.path));
-    return {
-      script: text,
-      scriptEntry,
-      manifest,
-      entryCount: zip.entryCount,
-      totalUncompressed: budget.used,
-    };
+    return { manifest, captured, entryCount: zip.entryCount, totalUncompressed: budget.used };
   } finally {
     zip.close();
   }
+}
+
+/** Nucleus Co-op: a zip with a root handler.js that sets Game.GameName or Game.ExecutableName. */
+export async function inspectPackage(file: string, limits: Limits = PACKAGE_LIMITS): Promise<Inspection> {
+  const scan = await scanZip(
+    file,
+    {
+      match: isScriptEntry,
+      maxBytes: limits.maxScriptBytes,
+      tooLarge: () => new PackageError('handler_too_large', 'handler.js is larger than 2 MiB.'),
+    },
+    limits,
+  );
+  if (!scan.captured) throw new PackageError('missing_handler', 'The package has no handler.js at its root.');
+  const { name: scriptEntry, data } = scan.captured;
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(data);
+  } catch {
+    throw new PackageError('handler_not_utf8', 'handler.js is not valid UTF-8 text.');
+  }
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  if (!declaresGame(text)) {
+    throw new PackageError(
+      'handler_missing_game',
+      'handler.js must set Game.GameName or Game.ExecutableName (the app refuses packages without them).',
+    );
+  }
+  const manifest = scan.manifest.map((m) => (m.path === scriptEntry ? { ...m, path: 'handler.js' } : m));
+  manifest.sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    script: text,
+    scriptEntry,
+    manifest,
+    entryCount: scan.entryCount,
+    totalUncompressed: scan.totalUncompressed,
+  };
 }
 
 /**

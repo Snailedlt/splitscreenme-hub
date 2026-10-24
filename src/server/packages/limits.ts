@@ -39,6 +39,7 @@ export type PackageErrorCode =
   | 'handler_too_large'
   | 'handler_not_utf8'
   | 'handler_missing_game'
+  | 'handler_invalid'
   | 'timeout'
   | 'busy';
 
